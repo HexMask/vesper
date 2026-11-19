@@ -215,6 +215,7 @@ pub fn tr(language: Language, key: &'static str) -> &'static str {
         "Цвет 1" => "Color 1",
         "Цвет 2" => "Color 2",
         "URL потока" => "Stream URL",
+        "Повторять видео" => "Loop video",
         "Путь к файлу" => "File path",
         "Выберите изображение, видео или папку" => "Choose an image, video, or folder",
         "Выбрать..." => "Browse...",

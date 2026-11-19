@@ -119,6 +119,7 @@ pub enum ScreensaverMode {
     Gradient { start: String, end: String }, // Hex colors
     Pattern(AnimatedPattern),
     Web(String),       // URL
+    YouTube(String),   // YouTube watch, short, or live URL
     Stream(String),    // URL
     Image(String),     // File path
     Video(String),     // File path
@@ -190,6 +191,8 @@ pub struct SettingsProfile {
     pub video_volume: u8,
     pub mode: ScreensaverMode,
     pub mute_video: bool,
+    #[serde(default)]
+    pub youtube_loop: bool,
     #[serde(default = "default_shadertoy_sound_enabled")]
     pub shadertoy_sound_enabled: bool,
     #[serde(default = "default_shadertoy_interaction_enabled")]
@@ -283,6 +286,7 @@ impl SettingsProfile {
             video_volume: default_video_volume(),
             mode: ScreensaverMode::Color("#000000".to_string()),
             mute_video: true,
+            youtube_loop: false,
             shadertoy_sound_enabled: default_shadertoy_sound_enabled(),
             shadertoy_interaction_enabled: default_shadertoy_interaction_enabled(),
             shadertoy_hide_cursor: default_shadertoy_hide_cursor(),
@@ -732,6 +736,7 @@ impl Config {
             video_volume: default_video_volume(),
             mode: legacy.mode,
             mute_video: legacy.mute_video,
+            youtube_loop: false,
             shadertoy_sound_enabled: default_shadertoy_sound_enabled(),
             shadertoy_interaction_enabled: default_shadertoy_interaction_enabled(),
             shadertoy_hide_cursor: default_shadertoy_hide_cursor(),

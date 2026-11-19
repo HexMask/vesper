@@ -2780,6 +2780,7 @@ dependencies = [
  "tokio",
  "toml",
  "ureq",
+ "url",
  "wayland-client",
  "wayland-protocols",
  "webkit6",

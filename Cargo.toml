@@ -27,5 +27,6 @@ wayland-client = "0.31"
 wayland-protocols = { version = "0.32.9", features = ["staging", "client"] }
 zbus = { version = "4", default-features = false, features = ["tokio"] }
 webkit6 = "0.3.0"
+url = "2.5.8"
 ureq = "2.12.1"
 feed-rs = "1.5.3"

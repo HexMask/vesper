@@ -7,7 +7,8 @@ A Linux desktop screensaver written in Rust with GTK4.
 ## Features
 
 - System tray app with quick actions, profiles, and status toggles
-- Multiple modes: solid color, gradient, pattern, web page, video stream, image, video, slideshow (folder), GLSL shader (Shadertoy), Python script
+- Multiple modes: solid color, gradient, pattern, web page, video stream, YouTube, image, video, slideshow (folder), GLSL shader (Shadertoy), Python script
+- YouTube mode accepts watch, youtu.be, and live video URLs, with mute, loop, and a settings preview. Playback depends on the video's embedding permission and YouTube autoplay policy.
 - User GLSL shaders (Shadertoy-style): single-file or multi-pass folders (Common/Image/BufferA-D), optional `Sound.glsl`
 - Shaderpacks library: import folders/`.zip`, previews, and selection inside GLSL mode
 - Python script mode (`.py`) for procedural/community patterns without recompiling

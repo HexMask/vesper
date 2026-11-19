@@ -173,6 +173,8 @@ impl ScreensaverWindow {
             ScreensaverMode::Pattern(AnimatedPattern::SmokeInk) => false,
             _ => true,
         };
+        // YouTube does not permit app overlays covering its embedded player.
+        let show_overlays = !matches!(&config_clone.mode, ScreensaverMode::YouTube(_));
 
         if monitors.is_empty() {
             let (window, media, slideshow_picture, clock_label, clock_time_label, clock_date_label) =
@@ -186,17 +188,17 @@ impl ScreensaverWindow {
                 config_clone.mouse_wake_delay_ms,
                 track_mouse_activity,
             );
-            let now_playing = if config_clone.show_now_playing {
+            let now_playing = if config_clone.show_now_playing && show_overlays {
                 Self::attach_now_playing_overlay(&window, config_clone.now_playing_position)
             } else {
                 None
             };
-            let rss_ticker = if config_clone.show_rss_ticker {
+            let rss_ticker = if config_clone.show_rss_ticker && show_overlays {
                 Self::attach_rss_ticker_overlay(&window)
             } else {
                 None
             };
-            let system_stats = if config_clone.show_system_stats {
+            let system_stats = if config_clone.show_system_stats && show_overlays {
                 Self::attach_system_stats_overlay(&window, config_clone.system_stats_position)
             } else {
                 None
@@ -260,17 +262,17 @@ impl ScreensaverWindow {
                     config_clone.mouse_wake_delay_ms,
                     track_mouse_activity,
                 );
-                let now_playing = if config_clone.show_now_playing {
+                let now_playing = if config_clone.show_now_playing && show_overlays {
                     Self::attach_now_playing_overlay(&window, config_clone.now_playing_position)
                 } else {
                     None
                 };
-                let rss_ticker = if config_clone.show_rss_ticker {
+                let rss_ticker = if config_clone.show_rss_ticker && show_overlays {
                     Self::attach_rss_ticker_overlay(&window)
                 } else {
                     None
                 };
-                let system_stats = if config_clone.show_system_stats {
+                let system_stats = if config_clone.show_system_stats && show_overlays {
                     Self::attach_system_stats_overlay(&window, config_clone.system_stats_position)
                 } else {
                     None
@@ -386,7 +388,9 @@ impl ScreensaverWindow {
         }
 
         let (media, slideshow_picture) = Self::setup_window_content(&window, config, allow_audio);
-        let (clock_label, clock_time_label, clock_date_label) = if config.show_clock {
+        let (clock_label, clock_time_label, clock_date_label) = if config.show_clock
+            && !matches!(&config.mode, ScreensaverMode::YouTube(_))
+        {
             if config.clock_two_lines {
                 let (t, d) = Self::attach_clock_overlay_two_lines(
                     &window,
@@ -836,6 +840,15 @@ impl ScreensaverWindow {
                 );
                 (None, None)
             }
+            ScreensaverMode::YouTube(url) => {
+                Self::setup_youtube_content(
+                    window,
+                    url,
+                    config.mute_video || !allow_audio,
+                    config.youtube_loop,
+                );
+                (None, None)
+            }
             ScreensaverMode::Stream(url) => {
                 let url = url.trim();
                 if url.is_empty() || !Self::is_valid_stream_url(url) {
@@ -1043,6 +1056,23 @@ impl ScreensaverWindow {
             Self::setup_color_content(&window_for_crash, "#000000");
         });
         window.set_child(Some(&web_view));
+    }
+
+    fn setup_youtube_content(window: &ApplicationWindow, url: &str, mute: bool, looping: bool) {
+        match crate::youtube::web_view(url, mute, looping) {
+            Ok(view) => {
+                view.set_hexpand(true);
+                view.set_vexpand(true);
+                let window_for_crash = window.clone();
+                view.connect_web_process_terminated(move |_, _| {
+                    window_for_crash.set_child(Some(&gtk4::Label::new(Some(
+                        "YouTube player stopped unexpectedly",
+                    ))));
+                });
+                window.set_child(Some(&view));
+            }
+            Err(message) => window.set_child(Some(&gtk4::Label::new(Some(message)))),
+        }
     }
 
     #[allow(dead_code)]

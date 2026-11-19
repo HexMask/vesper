@@ -48,6 +48,8 @@ pub struct ContentWidgets {
     pub web_url_row: adw::EntryRow,
     pub web_interaction_switch: Switch,
     pub stream_url_row: adw::EntryRow,
+    pub youtube_loop_row: adw::ActionRow,
+    pub youtube_loop_switch: Switch,
     pub shadertoy_source_row: adw::ComboRow,
     pub shadertoy_source_model: gtk4::StringList,
     pub shadertoy_pack_row: adw::ComboRow,
@@ -120,6 +122,7 @@ pub fn build_content_group(config: &Config, lang: Language) -> ContentWidgets {
         (7, tr(lang, "Видео по URL"), mode_icon_name(7)),
         (8, tr(lang, "Python скрипт"), mode_icon_name(8)),
         (9, tr(lang, "GLSL шейдер"), mode_icon_name(9)),
+        (10, "YouTube", mode_icon_name(10)),
     ];
 
     for (idx, name, icon) in modes {
@@ -148,6 +151,7 @@ pub fn build_content_group(config: &Config, lang: Language) -> ContentWidgets {
         ScreensaverMode::Gradient { .. } => 1,
         ScreensaverMode::Pattern(_) => 2,
         ScreensaverMode::Web(_) => 3,
+        ScreensaverMode::YouTube(_) => 10,
         ScreensaverMode::Image(_) => 4,
         ScreensaverMode::Video(_) => 5,
         ScreensaverMode::Slideshow(_) => 6,
@@ -341,13 +345,24 @@ pub fn build_content_group(config: &Config, lang: Language) -> ContentWidgets {
     let stream_url_row = adw::EntryRow::builder()
         .title(tr(lang, "URL потока"))
         .build();
-    if let ScreensaverMode::Stream(url) = &config.active_profile().mode {
-        stream_url_row.set_text(url);
+    match &config.active_profile().mode {
+        ScreensaverMode::Stream(url) | ScreensaverMode::YouTube(url) => stream_url_row.set_text(url),
+        _ => (),
+    }
+    if initial_mode_idx == 10 {
+        stream_url_row.set_title("YouTube URL");
     }
     stream_url_row.set_visible(matches!(
         config.active_profile().mode,
-        ScreensaverMode::Stream(_)
+        ScreensaverMode::Stream(_) | ScreensaverMode::YouTube(_)
     ));
+    let youtube_loop_row = adw::ActionRow::builder().title(tr(lang, "Повторять видео")).build();
+    youtube_loop_row.set_visible(initial_mode_idx == 10);
+    let youtube_loop_switch = Switch::builder()
+        .valign(Align::Center)
+        .active(config.active_profile().youtube_loop)
+        .build();
+    youtube_loop_row.add_suffix(&youtube_loop_switch);
 
     let shadertoy_source_model =
         gtk4::StringList::new(&[tr(lang, "Файл/папка"), tr(lang, "Шейдерпак")]);
@@ -479,6 +494,7 @@ pub fn build_content_group(config: &Config, lang: Language) -> ContentWidgets {
     media_list_row.set_visible(list_visible);
     media_list_box.set_visible(list_visible);
     file_group.add(&stream_url_row);
+    file_group.add(&youtube_loop_row);
     file_group.add(&shadertoy_source_row);
     file_group.add(&shadertoy_pack_row);
     file_group.add(&shadertoy_shader_row);
@@ -534,6 +550,8 @@ pub fn build_content_group(config: &Config, lang: Language) -> ContentWidgets {
         web_url_row,
         web_interaction_switch,
         stream_url_row,
+        youtube_loop_row,
+        youtube_loop_switch,
         shadertoy_source_row,
         shadertoy_source_model,
         shadertoy_pack_row,
@@ -585,6 +603,7 @@ pub fn mode_icon_name(mode_index: u32) -> &'static str {
         7 => "media-playback-start-symbolic",
         8 => "applications-development-symbolic",
         9 => "preferences-desktop-theme-symbolic",
+        10 => "video-x-generic-symbolic",
         _ => "media-optical-symbolic",
     }
 }
@@ -601,6 +620,7 @@ pub fn mode_label(mode_index: u32, lang: Language) -> &'static str {
         7 => tr(lang, "Видео по URL"),
         8 => tr(lang, "Python скрипт"),
         9 => tr(lang, "GLSL шейдер"),
+        10 => "YouTube",
         _ => tr(lang, "Неизвестно"),
     }
 }
@@ -1923,6 +1943,7 @@ pub fn build_preview_widget(
     stream_url_row: &adw::EntryRow,
     file_row: &adw::ActionRow,
     mute_switch: &Switch,
+    youtube_loop: bool,
     video_volume: u8,
     preview_paused: bool,
     preview_path: Option<&std::path::Path>,
@@ -2171,6 +2192,15 @@ pub fn build_preview_widget(
             area.set_can_focus(false);
             (area.upcast(), None, None)
         }
+        10 => {
+            let url = stream_url_row.text();
+            let muted = mute_switch.is_active();
+            let web_view = match crate::youtube::web_view(&url, muted, youtube_loop) {
+                Ok(view) => view,
+                Err(message) => return (build_preview_placeholder(message), None, None),
+            };
+            (web_view.clone().upcast(), None, Some(web_view))
+        }
         _ => (
             build_preview_placeholder(tr(lang, "Режим не поддерживается")),
             None,
@@ -2178,7 +2208,7 @@ pub fn build_preview_widget(
         ),
     };
 
-    if !clock_enabled {
+    if !clock_enabled || mode == 10 {
         return (base_widget, media, web_view);
     }
 

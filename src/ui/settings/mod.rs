@@ -73,6 +73,8 @@ struct SettingsUiRefs {
     web_url_row: adw::EntryRow,
     web_interaction_switch: Switch,
     stream_url_row: adw::EntryRow,
+    youtube_loop_row: adw::ActionRow,
+    youtube_loop_switch: Switch,
     shadertoy_source_row: adw::ComboRow,
     _shadertoy_source_model: gtk4::StringList,
     shadertoy_pack_row: adw::ComboRow,
@@ -331,7 +333,7 @@ impl SettingsController {
                     self.lang,
                 );
             }
-            ScreensaverMode::Stream(url) => {
+            ScreensaverMode::Stream(url) | ScreensaverMode::YouTube(url) => {
                 self.ui.stream_url_row.set_text(url);
                 self.ui.web_url_row.set_text("");
                 set_file_row_path(
@@ -451,6 +453,12 @@ impl SettingsController {
             &self.ui.media_list_box,
             mode_idx,
         );
+        self.ui.youtube_loop_row.set_visible(mode_idx == 10);
+        self.ui.stream_url_row.set_title(if mode_idx == 10 {
+            "YouTube URL"
+        } else {
+            tr(self.lang, "URL потока")
+        });
 
         {
             let path = profile.water_ripples_background_image.trim();
@@ -487,6 +495,7 @@ impl SettingsController {
             .slideshow_interval_spin
             .set_value(profile.slideshow_interval_seconds as f64);
         self.ui.mute_switch.set_active(profile.mute_video);
+        self.ui.youtube_loop_switch.set_active(profile.youtube_loop);
 	        self.ui
 	            .shadertoy_interaction_switch
 	            .set_active(profile.shadertoy_interaction_enabled);
@@ -676,6 +685,7 @@ impl SettingsController {
         profile.mouse_wake_delay_ms = self.ui.mouse_wake_spin.value() as u64;
         profile.fade_enabled = self.ui.fade_switch.is_active();
         profile.mute_video = self.ui.mute_switch.is_active();
+        profile.youtube_loop = self.ui.youtube_loop_switch.is_active();
         profile.shadertoy_interaction_enabled = self.ui.shadertoy_interaction_switch.is_active();
         profile.shadertoy_hide_cursor = self.ui.shadertoy_hide_cursor_switch.is_active();
         profile.shadertoy_sound_enabled = self.ui.shadertoy_sound_switch.is_active();
@@ -768,6 +778,10 @@ impl SettingsController {
             7 => ScreensaverMode::Stream(self.ui.stream_url_row.text().to_string()),
             8 => ScreensaverMode::PythonScript(path_or_empty(file_row_path(&self.ui.file_row))),
             9 => ScreensaverMode::Shadertoy(path_or_empty(file_row_path(&self.ui.file_row))),
+            10 => ScreensaverMode::YouTube(
+                crate::youtube::canonical_url(&self.ui.stream_url_row.text())
+                    .unwrap_or_else(|_| self.ui.stream_url_row.text().to_string()),
+            ),
             _ => ScreensaverMode::Color(content::rgba_to_hex(self.ui.color_button.rgba())),
         };
 
@@ -942,6 +956,8 @@ impl SettingsWindow {
             web_url_row,
             web_interaction_switch,
             stream_url_row,
+            youtube_loop_row,
+            youtube_loop_switch,
             shadertoy_source_row,
             shadertoy_source_model,
             shadertoy_pack_row,
@@ -1239,6 +1255,7 @@ impl SettingsWindow {
         mode_selector.connect_selected_children_changed({
             let stack = stack.clone();
             let stream_url_row = stream_url_row.clone();
+            let youtube_loop_row = youtube_loop_row.clone();
             let shadertoy_source_row = shadertoy_source_row.clone();
             let shadertoy_pack_row = shadertoy_pack_row.clone();
             let shadertoy_shader_row = shadertoy_shader_row.clone();
@@ -1260,6 +1277,12 @@ impl SettingsWindow {
                 };
                 let mode_idx = unsafe { child.data::<u32>("mode-index").unwrap().as_ref().clone() };
                 set_stack_for_mode(&stack, mode_idx);
+                youtube_loop_row.set_visible(mode_idx == 10);
+                stream_url_row.set_title(if mode_idx == 10 {
+                    "YouTube URL"
+                } else {
+                    tr(lang, "URL потока")
+                });
 	                set_content_mode_visibility(
 	                    &stream_url_row,
 	                    &shadertoy_source_row,
@@ -1391,6 +1414,7 @@ impl SettingsWindow {
 	            let web_url_row = web_url_row.clone();
 	            let stream_url_row = stream_url_row.clone();
 	            let mute_switch = mute_switch.clone();
+                let youtube_loop_switch = youtube_loop_switch.clone();
 	            let shadertoy_interaction_switch = shadertoy_interaction_switch.clone();
 	            let video_volume_spin = video_volume_spin.clone();
 	            let clock_switch = clock_switch.clone();
@@ -1454,6 +1478,7 @@ impl SettingsWindow {
                     &stream_url_row,
                     &file_row,
 	                    &mute_switch,
+                    youtube_loop_switch.is_active(),
 	                    video_volume_spin.value() as u8,
 	                    preview_pause_switch.is_active(),
 	                    preview_path.as_deref(),
@@ -1531,6 +1556,8 @@ impl SettingsWindow {
                 web_url_row: web_url_row.clone(),
                 web_interaction_switch: web_interaction_switch.clone(),
                 stream_url_row: stream_url_row.clone(),
+                youtube_loop_row: youtube_loop_row.clone(),
+                youtube_loop_switch: youtube_loop_switch.clone(),
                 shadertoy_source_row: shadertoy_source_row.clone(),
                 _shadertoy_source_model: shadertoy_source_model.clone(),
                 shadertoy_pack_row: shadertoy_pack_row.clone(),
@@ -2498,6 +2525,15 @@ impl SettingsWindow {
         });
 
         stream_url_row.connect_notify_local(Some("text"), {
+            let controller = controller.clone();
+            move |_, _| {
+                controller.mark_modified();
+                (controller.update_preview)();
+                (controller.update_status)();
+            }
+        });
+
+        youtube_loop_switch.connect_notify_local(Some("active"), {
             let controller = controller.clone();
             move |_, _| {
                 controller.mark_modified();
@@ -3643,7 +3679,7 @@ fn build_status_text(
         }
         2 => detail = content::pattern_label(pattern_row.selected(), lang).to_string(),
         3 => detail = web_url_row.text().to_string(),
-        7 => detail = stream_url_row.text().to_string(),
+        7 | 10 => detail = stream_url_row.text().to_string(),
         4 | 5 => {
             detail = file_row
                 .subtitle()
@@ -3796,6 +3832,7 @@ fn profile_mode_index(mode: &ScreensaverMode) -> u32 {
         ScreensaverMode::Video(_) => 5,
         ScreensaverMode::Slideshow(_) => 6,
         ScreensaverMode::Stream(_) => 7,
+        ScreensaverMode::YouTube(_) => 10,
         ScreensaverMode::PythonScript(_) => 8,
         ScreensaverMode::Shadertoy(_) => 9,
     }
@@ -3807,7 +3844,7 @@ fn set_stack_for_mode(stack: &Stack, mode_idx: u32) {
         1 => stack.set_visible_child_name("gradient_page"),
         2 => stack.set_visible_child_name("pattern_page"),
         3 => stack.set_visible_child_name("web_page"),
-        4 | 5 | 6 | 7 | 8 | 9 => stack.set_visible_child_name("file_page"),
+        4 | 5 | 6 | 7 | 8 | 9 | 10 => stack.set_visible_child_name("file_page"),
         _ => {}
     }
 }
@@ -3834,7 +3871,7 @@ fn set_content_mode_visibility(
     let is_image = mode_idx == 4;
     let is_video = mode_idx == 5;
     let is_slideshow = mode_idx == 6;
-    let is_stream = mode_idx == 7;
+    let is_stream = mode_idx == 7 || mode_idx == 10;
     let is_python = mode_idx == 8;
     let is_shadertoy = mode_idx == 9;
     let is_shaderpack_source = is_shadertoy && shadertoy_source_row.selected() == 1;
@@ -3857,7 +3894,7 @@ fn set_content_mode_visibility(
     shadertoy_sound_row.set_visible(has_shadertoy_sound);
     slideshow_interval_row.set_visible(is_slideshow);
     mute_row.set_visible(is_video || is_stream || has_shadertoy_sound);
-    volume_row.set_visible(is_video || is_stream || has_shadertoy_sound);
+    volume_row.set_visible(is_video || mode_idx == 7 || has_shadertoy_sound);
     random_row.set_visible(list_visible);
     media_list_row.set_visible(list_visible);
     media_list_box.set_visible(list_visible);
@@ -4217,6 +4254,12 @@ fn save_settings(
     toast_overlay: &adw::ToastOverlay,
     sender: &mpsc::Sender<AppMessage>,
 ) {
+    if selected_mode_index(&controller.ui.mode_selector) == 10 {
+        if let Err(message) = crate::youtube::video_id(&controller.ui.stream_url_row.text()) {
+            toast_overlay.add_toast(adw::Toast::new(message));
+            return;
+        }
+    }
     let index = controller.active_profile_index();
     controller.apply_ui_to_profile(index);
     let mut config = controller.config.borrow().clone();

@@ -5,6 +5,7 @@ mod config;
 mod desktop;
 mod i18n;
 mod idle;
+mod youtube;
 mod monitors;
 mod mpris;
 mod rss;
@@ -1233,7 +1234,7 @@ fn start_screensaver(state: Arc<AppState>) {
         let wants_audio = (!p.mute_video
             && matches!(
                 p.mode,
-                ScreensaverMode::Video(_) | ScreensaverMode::Stream(_)
+                ScreensaverMode::Video(_) | ScreensaverMode::Stream(_) | ScreensaverMode::YouTube(_)
             ))
             || (!p.mute_video
                 && p.shadertoy_sound_enabled
@@ -1241,7 +1242,7 @@ fn start_screensaver(state: Arc<AppState>) {
         if wants_audio && !audio_assigned {
             audio_assigned = true;
         } else if wants_audio {
-            if matches!(p.mode, ScreensaverMode::Video(_) | ScreensaverMode::Stream(_)) {
+            if matches!(p.mode, ScreensaverMode::Video(_) | ScreensaverMode::Stream(_) | ScreensaverMode::YouTube(_)) {
                 p.mute_video = true;
                 p.video_volume = 0;
             } else {
@@ -1394,7 +1395,7 @@ fn replace_active_screensaver_windows(state: Arc<AppState>, battery_black: bool,
         let wants_audio = (!p.mute_video
             && matches!(
                 p.mode,
-                ScreensaverMode::Video(_) | ScreensaverMode::Stream(_)
+                ScreensaverMode::Video(_) | ScreensaverMode::Stream(_) | ScreensaverMode::YouTube(_)
             ))
             || (!p.mute_video
                 && p.shadertoy_sound_enabled
@@ -1402,7 +1403,7 @@ fn replace_active_screensaver_windows(state: Arc<AppState>, battery_black: bool,
         if wants_audio && !audio_assigned {
             audio_assigned = true;
         } else if wants_audio {
-            if matches!(p.mode, ScreensaverMode::Video(_) | ScreensaverMode::Stream(_)) {
+            if matches!(p.mode, ScreensaverMode::Video(_) | ScreensaverMode::Stream(_) | ScreensaverMode::YouTube(_)) {
                 p.mute_video = true;
                 p.video_volume = 0;
             } else {
@@ -1474,6 +1475,7 @@ fn format_activation_mode(profile: &SettingsProfile, lang: Language) -> String {
             Some(pattern_label(*pattern, lang).to_string()),
         ),
         ScreensaverMode::Web(url) => (tr(lang, "Веб-страница"), Some(url.clone())),
+        ScreensaverMode::YouTube(url) => ("YouTube", Some(url.clone())),
         ScreensaverMode::Stream(url) => (tr(lang, "Видео по URL"), Some(url.clone())),
         ScreensaverMode::Image(path) => (tr(lang, "Изображение"), Some(path_basename(path))),
         ScreensaverMode::Video(path) => (tr(lang, "Видео"), Some(path_basename(path))),
@@ -1947,6 +1949,7 @@ fn validate_profile_for_start(profile: &SettingsProfile, lang: Language) -> Resu
         }
         ScreensaverMode::Slideshow(path) => validate_slideshow_path(path, lang),
         ScreensaverMode::Web(url) => validate_web_url(url, lang),
+        ScreensaverMode::YouTube(url) => youtube::video_id(url).map(|_| ()).map_err(str::to_string),
         ScreensaverMode::Stream(url) => validate_stream_url(url, lang),
         ScreensaverMode::PythonScript(path) => validate_python_script_path(path, lang),
         ScreensaverMode::Shadertoy(path) => validate_shadertoy_shader_path(path, lang),
