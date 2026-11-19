@@ -46,6 +46,18 @@ pub fn web_view(input: &str, muted: bool, looping: bool) -> Result<webkit6::WebV
     if let Some(settings) = webkit6::prelude::WebViewExt::settings(&view) {
         settings.set_media_playback_requires_user_gesture(false);
     }
+    view.connect_decide_policy(|_, decision, kind| {
+        if kind != webkit6::PolicyDecisionType::NavigationAction {
+            return false;
+        }
+        // The default website policy allows autoplay only without sound.
+        decision.use_with_policies(
+            &webkit6::WebsitePolicies::builder()
+                .autoplay(webkit6::AutoplayPolicy::Allow)
+                .build(),
+        );
+        true
+    });
     view.set_is_muted(muted);
     view.set_can_focus(false);
     view.load_html(&player_html(&id, muted, looping), Some(&format!("https://{}/", crate::APP_ID)));
